@@ -3,3 +3,4 @@ import os
 print(f"Version: {os.environ.get('VERSION', 'unknown')}")
 print('New feature')
 print('Tagged flow feature')
+print('Inheritance test')
