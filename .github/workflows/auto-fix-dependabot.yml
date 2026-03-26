@@ -53,15 +53,15 @@ jobs:
           jq -c '.[]' dependabot_alerts.json | while IFS= read -r alert; do
             i=$((i+1))
             fname="claude_requests/alert_${i}"
-            cat <<EOF > "${fname}.prompt"
-            You are an automated code assistant. Input is a GitHub Dependabot alert JSON object. Produce a JSON object with these fields:
-            - path: path to the file to modify (relative to repo root), e.g. package.json or requirements.txt
-            - patch: a unified diff applying the fix (git apply friendly)
-            - summary: a one-line explanation of the change
-
-            Output ONLY the JSON on stdout (no extra commentary). Here is the alert JSON:
-            $(echo "$alert")
-EOF
+            {
+              echo "You are an automated code assistant. Input is a GitHub Dependabot alert JSON object. Produce a JSON object with these fields:"
+              echo "- path: path to the file to modify (relative to repo root), e.g. package.json or requirements.txt"
+              echo "- patch: a unified diff applying the fix (git apply friendly)"
+              echo "- summary: a one-line explanation of the change"
+              echo ""
+              echo "Output ONLY the JSON on stdout (no extra commentary). Here is the alert JSON:"
+              echo "$alert"
+            } > "${fname}.prompt"
             if ! npx -y @anthropic-ai/claude-code@latest --print < "${fname}.prompt" > "${fname}.out" 2>/tmp/claude.err; then
               echo "Claude CLI failed for ${fname}"; cat /tmp/claude.err || true; exit 1
             fi
