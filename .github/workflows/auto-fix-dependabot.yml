@@ -63,7 +63,7 @@ jobs:
               echo "Output ONLY the JSON on stdout (no extra commentary). Here is the alert JSON:"
               printf '%s\n' "$alert"
             } > "${fname}.prompt"
-            if ! npx -y @anthropic/claude-code@latest --print < "${fname}.prompt" > "${fname}.out" 2>/tmp/claude.err; then
+            if ! npx -y @anthropic-ai/claude-code@latest --print < "${fname}.prompt" > "${fname}.out" 2>/tmp/claude.err; then
               echo "Claude CLI failed for ${fname}"; cat /tmp/claude.err || true; exit 1
             fi
             echo "Wrote ${fname}.out"
