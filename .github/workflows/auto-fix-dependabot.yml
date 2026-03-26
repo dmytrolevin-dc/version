@@ -12,6 +12,7 @@ permissions:
   contents: write
   pull-requests: write
   security-events: read
+  dependabot: read
 
 jobs:
   fetch-and-fix:
