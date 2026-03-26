@@ -1,7 +1,8 @@
 {
-  name: vulnerable-sample,
-  version: 0.0.1,
-  dependencies: {
-    lodash: 4.17.15
+  "name": "vulnerable-sample",
+  "version": "0.0.1",
+  "dependencies": {
+    "lodash": "4.17.15",
+    "minimist": "0.0.8"
   }
 }
