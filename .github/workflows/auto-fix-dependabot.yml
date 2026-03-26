@@ -29,9 +29,6 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install Claude Code CLI
-        run: |
-          npm install -g @anthropic/claude-code@latest || true
 
       - name: Fetch Dependabot alerts
         id: fetch_alerts
@@ -66,7 +63,7 @@ jobs:
               echo "Output ONLY the JSON on stdout (no extra commentary). Here is the alert JSON:"
               printf '%s\n' "$alert"
             } > "${fname}.prompt"
-            if ! claude --print < "${fname}.prompt" > "${fname}.out" 2>/tmp/claude.err; then
+            if ! npx -y @anthropic/claude-code@latest --print < "${fname}.prompt" > "${fname}.out" 2>/tmp/claude.err; then
               echo "Claude CLI failed for ${fname}"; cat /tmp/claude.err || true; exit 1
             fi
             echo "Wrote ${fname}.out"
