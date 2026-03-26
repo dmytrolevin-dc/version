@@ -31,12 +31,21 @@ jobs:
 
       - name: Fetch Dependabot alerts
         id: fetch_alerts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Fetching Dependabot alerts for $REPO"
-          curl -sS -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/$REPO/dependabot/alerts?per_page=100" > dependabot_alerts.json
-          jq '. | length' dependabot_alerts.json > alerts_count.txt || true
-          echo "alerts_count=$(cat alerts_count.txt)" >> $GITHUB_OUTPUT
+          gh api "repos/$REPO/dependabot/alerts?per_page=100" > dependabot_alerts.json
+          
+          # Check if we got an error message or an empty result
+          if jq -e '.message' dependabot_alerts.json >/dev/null; then
+            echo "Error from API: $(jq -r .message dependabot_alerts.json)"
+            echo "alerts_count=0" >> $GITHUB_OUTPUT
+          else
+            alerts_count=$(jq '. | length' dependabot_alerts.json)
+            echo "alerts_count=$alerts_count" >> $GITHUB_OUTPUT
+            echo "Found $alerts_count alerts."
+          fi
 
       - name: Stop if no alerts
         if: steps.fetch_alerts.outputs.alerts_count == '0'
