@@ -1,0 +1,7 @@
+```json
+{
+  "path": "package-lock.json",
+  "patch": "--- a/package-lock.json\n+++ b/package-lock.json\n@@ -8,7 +8,7 @@\n       \"name\": \"vulnerable-sample\",\n       \"version\": \"0.0.1\",\n       \"dependencies\": {\n-        \"lodash\": \"4.17.15\",\n+        \"lodash\": \"4.17.21\",\n         \"minimist\": \"0.0.8\"\n       }\n     },\n     \"node_modules/lodash\": {\n-      \"version\": \"4.17.15\",\n-      \"resolved\": \"https://registry.npmjs.org/lodash/-/lodash-4.17.15.tgz\",\n-      \"integrity\": \"sha512-8xOcRHvCjnocdS5cpwXQXVzmmh5e5+saE2QGoeQmbKmRS6J3VQppPOIt0MnmE+4xlZoumy0GPG0D0MVIQbNA1A==\",\n+      \"version\": \"4.17.21\",\n+      \"resolved\": \"https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz\",\n+      \"integrity\": \"sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZkCbQpfe4lF7CPZs1EA==\",\n       \"license\": \"MIT\"\n     },",
+  "summary": "Bump lodash from 4.17.15 to 4.17.21 to fix CVE-2020-28500 ReDoS vulnerability"
+}
+```

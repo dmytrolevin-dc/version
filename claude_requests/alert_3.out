@@ -1,0 +1,3 @@
+```json
+{"path":"package.json","patch":"--- a/package.json\n+++ b/package.json\n@@ -2,7 +2,7 @@\n   \"name\": \"vulnerable-sample\",\n   \"version\": \"0.0.1\",\n   \"dependencies\": {\n-    \"lodash\": \"4.17.15\",\n+    \"lodash\": \"4.17.19\",\n     \"minimist\": \"0.0.8\"\n   }\n }\n","summary":"Bump lodash from 4.17.15 to 4.17.19 to fix CVE-2020-8203 prototype pollution vulnerability"}
+```

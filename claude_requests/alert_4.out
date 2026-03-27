@@ -1,0 +1,7 @@
+```json
+{
+  "path": "package-lock.json",
+  "patch": "--- a/package-lock.json\n+++ b/package-lock.json\n@@ -9,7 +9,7 @@\n       \"version\": \"0.0.1\",\n       \"dependencies\": {\n         \"lodash\": \"4.17.15\",\n-        \"minimist\": \"0.0.8\"\n+        \"minimist\": \"0.2.4\"\n       }\n     },\n     \"node_modules/lodash\": {\n@@ -19,9 +19,9 @@\n       \"license\": \"MIT\"\n     },\n     \"node_modules/minimist\": {\n-      \"version\": \"0.0.8\",\n-      \"resolved\": \"https://registry.npmjs.org/minimist/-/minimist-0.0.8.tgz\",\n-      \"integrity\": \"sha512-miQKw5Hv4NS1Psg2517mV4e4dYNaO3++hjAvLOAzKqZ61rH8NS1SK+vbfBWZ5PY/Me/bEWhUwqMghEW5Fb9T7Q==\",\n+      \"version\": \"0.2.4\",\n+      \"resolved\": \"https://registry.npmjs.org/minimist/-/minimist-0.2.4.tgz\",\n+      \"integrity\": \"sha512-M6xcBqyifl3PJBX89MYKlcylpZgBWQvAFOEWETg3TLdFGeBM6Wt93dPM/9t6WflqXYrNmQMwDpMJv2uPQqd3g==\",\n       \"license\": \"MIT\"\n     }\n   }\n }",
+  "summary": "Bump minimist from 0.0.8 to 0.2.4 to fix CVE-2021-44906 (Prototype Pollution, CVSS 9.8)"
+}
+```
