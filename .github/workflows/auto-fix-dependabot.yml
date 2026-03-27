@@ -65,7 +65,7 @@ jobs:
             {
               echo "You are an automated code assistant. Input is a GitHub Dependabot alert JSON object. Produce a JSON object with these fields:"
               echo "- path: path to the file to modify (relative to repo root), e.g. package.json or requirements.txt"
-              echo "- patch: a unified diff applying the fix (git apply friendly)"
+              echo "- patch: a strictly valid unified diff (git apply compatible). IMPORTANT: Unchanged lines MUST start with a space, added lines with '+', and removed lines with '-'."
               echo "- summary: a one-line explanation of the change"
               echo ""
               echo "Output ONLY the JSON on stdout (no extra commentary). Here is the alert JSON:"
