@@ -57,11 +57,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p claude_requests
-          i=0
+          idx=0
           # iterate compact JSON alerts and call Claude CLI for each
-          jq -c '.[]' dependabot_alerts.json | while IFS= read -r alert; do
-            i=$((i+1))
-            fname="claude_requests/alert_${i}"
+          # Use a for loop over indices to allow re-fetching the alert JSON
+          # and saving it to a file.
+          num_alerts=$(jq '. | length' dependabot_alerts.json)
+          for i in $(seq 0 $((num_alerts - 1))); do
+            idx=$((i+1)) # Use 1-based indexing for filenames
+            alert=$(jq -c ".[$i]" dependabot_alerts.json)
+            fname="claude_requests/alert_${idx}"
+            echo "$alert" > "${fname}.json"
             {
               echo "You are an automated code assistant. Input is a GitHub Dependabot alert JSON object. Produce a JSON object with these fields:"
               echo "- path: path to the file to modify (relative to repo root), e.g. package.json or requirements.txt"
@@ -87,18 +92,24 @@ jobs:
           git config user.email "claude-bot@users.noreply.github.com"
           idx=0
           for f in claude_requests/*.out; do
-            idx=$((idx+1))
-            echo "Processing $f"
+            # The base name (e.g. claude_requests/alert_1)
+            base="${f%.out}"
+            meta="${base}.json"
+            
+            echo "Processing $f with meta $meta"
             # Extract JSON produced by Claude (strip markdown code fences if present)
-            cat "$f" | sed 's/^```json//;s/^```//' | sed '/^$/d' | sed -n '1,2000p' > tmp.json
-            # Validate JSON
-            jq . tmp.json >/dev/null 2>&1 || { echo "Invalid JSON from claude for $f"; cat $f; continue; }
-            path=$(jq -r .path tmp.json)
-            patch=$(jq -r .patch tmp.json)
-            summary=$(jq -r .summary tmp.json)
-            alert_num=$(jq -r '.number' tmp.json)
-            ghsa_id=$(jq -r '.security_advisory.ghsa_id' tmp.json)
-            package_name=$(jq -r '.dependency.package.name' tmp.json)
+            cat "$f" | sed 's/^```json//;s/^```//' | sed '/^$/d' | sed -n '1,2000p' > tmp_claude.json
+            # Validate Claude JSON
+            jq . tmp_claude.json >/dev/null 2>&1 || { echo "Invalid JSON from claude for $f"; cat $f; continue; }
+            
+            path=$(jq -r .path tmp_claude.json)
+            patch=$(jq -r .patch tmp_claude.json)
+            summary=$(jq -r .summary tmp_claude.json)
+            
+            # Extract key info for branch and duplicate checks from ORIGINAL meta
+            alert_num=$(jq -r '.number' "$meta")
+            ghsa_id=$(jq -r '.security_advisory.ghsa_id' "$meta")
+            package_name=$(jq -r '.dependency.package.name' "$meta")
             
             if [ "$path" = "null" ] || [ -z "$patch" ]; then
               echo "No actionable patch for alert #${alert_num}"; continue
