@@ -93,7 +93,9 @@ jobs:
             cat "$f" | sed 's/^```json//;s/^```//' | sed '/^$/d' | sed -n '1,2000p' > tmp.json
             # Validate JSON
             jq . tmp.json >/dev/null 2>&1 || { echo "Invalid JSON from claude for $f"; cat $f; continue; }
-            # Extract key info for branch and duplicate checks
+            path=$(jq -r .path tmp.json)
+            patch=$(jq -r .patch tmp.json)
+            summary=$(jq -r .summary tmp.json)
             alert_num=$(jq -r '.number' tmp.json)
             ghsa_id=$(jq -r '.security_advisory.ghsa_id' tmp.json)
             package_name=$(jq -r '.dependency.package.name' tmp.json)
