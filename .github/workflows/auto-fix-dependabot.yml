@@ -32,7 +32,7 @@ jobs:
       - name: Fetch Dependabot alerts
         id: fetch_alerts
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           echo "Fetching Dependabot alerts for $REPO"
           gh api "repos/$REPO/dependabot/alerts?per_page=100" > dependabot_alerts.json
