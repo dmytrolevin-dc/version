@@ -104,7 +104,16 @@ jobs:
             echo "ERROR: No API key available"
             exit 1
           fi
-          echo "✓ API Key available"
+          echo "✓ API Key available (length: ${#ANTHROPIC_API_KEY})"
+          
+          # Test API key with a simple request
+          echo "Testing API key..."
+          test_response=$(curl -s -X POST "https://api.anthropic.com/v1/messages" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d '{"model":"claude-3-5-sonnet","max_tokens":100,"messages":[{"role":"user","content":"test"}]}' 2>&1 | head -c 200)
+          echo "Test response: $test_response"
           
           mkdir -p claude_requests
           
