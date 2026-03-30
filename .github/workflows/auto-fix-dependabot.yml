@@ -20,7 +20,7 @@ jobs:
     env:
       REPO: ${{ github.repository }}
       OWNER: ${{ github.repository_owner }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -86,7 +86,7 @@ jobs:
       - name: Process alerts and ask Claude for fixes
         if: steps.fetch_alerts.outputs.alerts_count != '0'
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
         run: |
           set -e
           mkdir -p claude_requests
