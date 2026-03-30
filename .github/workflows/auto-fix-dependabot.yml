@@ -123,11 +123,30 @@ jobs:
               alert_escaped=$(echo "$alert" | jq -Rs .)
               
               echo "[$idx/$num_alerts] $type alert..."
-              curl -s -X POST "https://api.anthropic.com/v1/messages" \
-                -H "x-api-key: $ANTHROPIC_API_KEY" \
+              
+              # Build JSON payload
+              json_payload=$(cat <<'JSONEOF'
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "max_tokens": 4096,
+  "system": "SYSTEM_MSG",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Alert metadata:\n\nALERT_DATA"
+    }
+  ]
+}
+JSONEOF
+)
+              json_payload="${json_payload//SYSTEM_MSG/$msg}"
+              json_payload="${json_payload//ALERT_DATA/$alert_escaped}"
+              
+              curl -X POST "https://api.anthropic.com/v1/messages" \
+                -H "x-api-key: ${ANTHROPIC_API_KEY}" \
                 -H "anthropic-version: 2023-06-01" \
                 -H "content-type: application/json" \
-                -d "{\"model\":\"claude-3-5-sonnet-20241022\",\"max_tokens\":4096,\"system\":\"$msg\",\"messages\":[{\"role\":\"user\",\"content\":\"Alert metadata:\\n\\n$alert_escaped\"}]}" \
+                -d "$json_payload" \
                 > "${fname}.response" 2>/tmp/claude.err || {
                 echo "ERROR: Claude API failed"; cat /tmp/claude.err; continue
               }
