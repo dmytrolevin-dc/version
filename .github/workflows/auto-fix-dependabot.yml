@@ -144,7 +144,7 @@ jobs:
               
               # Build JSON payload using jq
               json_payload=$(jq -n \
-                --arg model "claude-3-5-sonnet-20241022" \
+                --arg model "claude-3-5-sonnet-latest" \
                 --arg system "$msg" \
                 --arg alert_data "$alert" \
                 '{
