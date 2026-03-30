@@ -20,7 +20,7 @@ jobs:
     env:
       REPO: ${{ github.repository }}
       OWNER: ${{ github.repository_owner }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,61 +30,22 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install dependencies
-        run: curl --version >/dev/null 2>&1 && echo "curl is available"
-
-      - name: Debug secrets
-        run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "ERROR: ANTHROPIC_API_KEY is empty!"
-            echo "Trying to use CLAUDE_API_KEY secret instead..."
-            export ANTHROPIC_API_KEY="${{ secrets.CLAUDE_API_KEY }}"
-          fi
-          echo "API Key status: $([ -n "$ANTHROPIC_API_KEY" ] && echo 'SET' || echo 'EMPTY')"
-
       - name: Fetch alerts
         id: fetch_alerts
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          set -e
-          echo "Fetching alerts for repo: $REPO"
-          
           # Fetch Dependabot alerts
-          echo "Fetching Dependabot alerts..."
-          if gh api "repos/$REPO/dependabot/alerts?per_page=100&state=open" > dependabot_alerts.json 2>/tmp/dep.err; then
-            dep_count=$(jq '. | length' dependabot_alerts.json)
-            echo "✓ Found $dep_count Dependabot alerts"
-          else
-            echo "ERROR fetching Dependabot:"
-            cat /tmp/dep.err
-            echo "[]" > dependabot_alerts.json
-            dep_count=0
-          fi
+          gh api "repos/$REPO/dependabot/alerts?per_page=100&state=open" > dependabot_alerts.json
           
           # Fetch Code Scanning alerts (CodeQL)
-          echo "Fetching Code Scanning alerts..."
-          if gh api "repos/$REPO/code-scanning/alerts?per_page=100&state=open" > code_scanning_alerts.json 2>/tmp/code.err; then
-            code_count=$(jq '. | length' code_scanning_alerts.json)
-            echo "✓ Found $code_count Code Scanning alerts"
-          else
-            echo "ERROR fetching Code Scanning:"
-            cat /tmp/code.err
-            echo "Trying alternative endpoint..."
-            if gh api "repos/$REPO/code-scanning/alerts" > code_scanning_alerts.json 2>/tmp/code2.err; then
-              code_count=$(jq '. | length' code_scanning_alerts.json)
-              echo "✓ Found $code_count Code Scanning alerts (alt endpoint)"
-            else
-              echo "Code Scanning endpoint not available or no alerts"
-              echo "[]" > code_scanning_alerts.json
-              code_count=0
-            fi
-          fi
+          gh api "repos/$REPO/code-scanning/alerts?per_page=100&state=open" > code_scanning_alerts.json
           
+          dep_count=$(jq '. | length' dependabot_alerts.json)
+          code_count=$(jq '. | length' code_scanning_alerts.json)
           total=$((dep_count + code_count))
-          echo "========================================"
-          echo "Total alerts: $total ($dep_count Dependabot + $code_count Code Scanning)"
-          echo "========================================"
+          
+          echo "Found $dep_count Dependabot and $code_count Code Scanning alerts."
           echo "alerts_count=$total" >> $GITHUB_OUTPUT
 
       - name: Stop if no alerts
@@ -95,169 +56,102 @@ jobs:
       - name: Process alerts and ask Claude for fixes
         if: steps.fetch_alerts.outputs.alerts_count != '0'
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || secrets.CLAUDE_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          set -e
-          
-          # Verify we have API key
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "ERROR: No API key available"
-            exit 1
-          fi
-          echo "✓ API Key available (Anthropic Claude API)"
-          
+          set -euo pipefail
           mkdir -p claude_requests
           
-          extract_json() {
-            local text="$1"
-            if echo "$text" | grep -q '```json'; then
-              echo "$text" | sed -n '/```json/,/```/p' | sed '/^```/d'
-            elif echo "$text" | grep -q '```'; then
-              echo "$text" | sed -n '/```/,/```/p' | sed '/^```/d'
-            else
-              echo "$text"
-            fi
-          }
-          
+          # Function to process an alert file
           process_alert() {
-            local type=$1
+            local type=$1      # "dependabot" or "code-scanning"
             local alert_file=$2
             
-            [ -f "$alert_file" ] || return
             num_alerts=$(jq '. | length' "$alert_file")
-            echo "Processing $num_alerts $type alerts..."
-            
             for i in $(seq 0 $((num_alerts - 1))); do
               idx=$((i+1))
               alert=$(jq -c ".[$i]" "$alert_file")
               fname="claude_requests/${type}_${idx}"
               echo "$alert" > "${fname}.json"
               
-              msg="Produce a valid JSON with fields: path, patch, summary. path=file to fix, patch=unified diff, summary=description."
-              [ "$type" = "code-scanning" ] && msg="Fix code vulnerabilities. $msg"
-              [ "$type" = "dependabot" ] && msg="Update dependencies safely. $msg"
+              msg="You are an automated code assistant. Input is a GitHub ${type} alert JSON object. Produce a JSON object with fields: path, patch, summary."
+              if [ "$type" = "code-scanning" ]; then
+                msg="$msg Focus on fixing the logic of the code to resolve the vulnerability (e.g. sanitizing input, removing secrets). Use unified diff format with spaces for context."
+              else
+                msg="$msg Focus on updating the dependency version. Use unified diff format with spaces for context."
+              fi
               
-              alert_escaped=$(echo "$alert" | jq -Rs .)
-              msg_escaped=$(echo "$msg" | jq -Rs .)
+              {
+                echo "$msg"
+                echo "Here is the alert JSON:"
+                echo "$alert"
+              } > "${fname}.prompt"
               
-              echo "[$idx/$num_alerts] $type alert..."
-              
-              # Build JSON payload using jq
-              json_payload=$(jq -n \
-                --arg model "claude-opus-4-1" \
-                --arg system "$msg" \
-                --arg alert_data "$alert" \
-                '{
-                  model: $model,
-                  max_tokens: 4096,
-                  system: $system,
-                  messages: [{
-                    role: "user",
-                    content: ("Alert metadata:\n\n" + $alert_data)
-                  }]
-                }')
-              
-              curl -s -X POST "https://api.anthropic.com/v1/messages" \
-                -H "x-api-key: $ANTHROPIC_API_KEY" \
-                -H "anthropic-version: 2023-06-01" \
-                -H "content-type: application/json" \
-                -d "$json_payload" \
-                > "${fname}.response" 2>/tmp/claude.err || {
-                echo "ERROR: Claude API failed"; cat /tmp/claude.err; continue
+              # Call Claude
+              npx -y @anthropic-ai/claude-code@latest --print < "${fname}.prompt" > "${fname}.out" 2>/tmp/claude.err || {
+                echo "Claude CLI failed for ${fname}"; continue
               }
-              
-              jq -e '.content[0].text' "${fname}.response" >/dev/null 2>&1 || {
-                echo "ERROR: Invalid response"; jq . "${fname}.response" >> /tmp/claude.err 2>&1; continue
-              }
-              
-              jq -r '.content[0].text' "${fname}.response" > "${fname}.out"
-              echo "✓ Got response"
+              echo "Wrote ${fname}.out"
             done
           }
           
           process_alert "dependabot" "dependabot_alerts.json"
           process_alert "code-scanning" "code_scanning_alerts.json"
-          [ -f /tmp/claude.err ] && echo "Errors:" && cat /tmp/claude.err
 
       - name: Apply patches, create branch & PRs
         if: steps.fetch_alerts.outputs.alerts_count != '0'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          set -e
+          set -euo pipefail
           git config user.name "claude-bot"
           git config user.email "claude-bot@users.noreply.github.com"
           
-          [ ! -d claude_requests ] && echo "No claude_requests directory" && exit 0
-          [ -z "$(ls -A claude_requests/*.out 2>/dev/null)" ] && echo "No responses from Claude" && exit 0
-          
           for f in claude_requests/*.out; do
-            [ ! -f "$f" ] && continue
             base="${f%.out}"
             meta="${base}.json"
-            type=$(basename "$base" | cut -d'_' -f1)
+            type=$(echo "$base" | cut -d'/' -f2 | cut -d'_' -f1)
             
-            echo ""
-            echo "========== Processing $f =========="
+            echo "Processing $type alert from $f"
+            # Extract JSON produced by Claude (strip markdown code fences if present)
+            cat "$f" | sed 's/^```json//;s/^```//' | sed '/^$/d' | sed -n '1,2000p' > tmp_claude.json
+            jq . tmp_claude.json >/dev/null 2>&1 || { echo "Invalid JSON from claude for $f"; continue; }
             
-            # Extract JSON from Claude response
-            if grep -q '```json' "$f" 2>/dev/null; then
-              sed -n '/```json/,/```/p' "$f" | sed '/^```/d' > tmp_claude.json || true
-            elif grep -q '```' "$f" 2>/dev/null; then
-              sed -n '/```/,/```/p' "$f" | sed '/^```/d' > tmp_claude.json || true
-            else
-              cp "$f" tmp_claude.json
-            fi
+            path=$(jq -r .path tmp_claude.json)
+            patch=$(jq -r .patch tmp_claude.json)
+            summary=$(jq -r .summary tmp_claude.json)
             
-            if ! jq . tmp_claude.json >/dev/null 2>&1; then
-              echo "ERROR: Invalid JSON"; continue
-            fi
-            
-            path=$(jq -r '.path // empty' tmp_claude.json)
-            patch=$(jq -r '.patch // empty' tmp_claude.json)
-            summary=$(jq -r '.summary // empty' tmp_claude.json)
-            
-            if [ -z "$path" ] || [ -z "$patch" ]; then
-              echo "SKIP: No valid patch"; continue
-            fi
-            
+            # Extract key info from ORIGINAL meta
             alert_num=$(jq -r '.number' "$meta")
             package_name=$(jq -r '.dependency.package.name // .rule.name // "code"' "$meta")
-            ghsa_id=$(jq -r '.security_advisory.ghsa_id // .rule.id // "unknown"' "$meta")
+            ghsa_id=$(jq -r '.security_advisory.ghsa_id // .rule.id // "scanned-vuln"' "$meta")
+            
+            if [ "$path" = "null" ] || [ -z "$patch" ] || [ "$path" = "" ]; then
+              echo "No actionable patch for alert #${alert_num}"; continue
+            fi
             
             pkg_slug=$(echo "$package_name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g')
             branch="auto/claude-fix-${type}-${alert_num}-${pkg_slug}"
             
-            echo "Alert #${alert_num}: $package_name"
-            
-            git checkout main || git checkout -b main
+            git checkout main
             git checkout -B "$branch"
             
-            echo "$patch" > /tmp/patch.diff
-            
-            if git apply --whitespace=fix /tmp/patch.diff 2>/tmp/apply.err; then
-              echo "✓ Patch applied"
+            printf '%s\n' "$patch" > /tmp/patch.diff
+            if git apply --whitespace=fix /tmp/patch.diff; then
               git add "$path"
               git commit -m "chore: claude fix [$type #${alert_num}]: $summary" || true
+              git push --set-upstream origin "$branch" --force
               
-              if git push --set-upstream origin "$branch" --force 2>/tmp/push.err; then
-                echo "✓ Branch pushed"
-                
-                if ! gh pr view "$branch" >/dev/null 2>&1; then
-                  if gh pr create --title "Claude Fix [${type}]: $summary" \
-                                 --body "Automated fix for alert #${alert_num}" \
-                                 --base main --head "$branch" 2>/tmp/pr.err; then
-                    echo "✓ PR created"
-                  else
-                    echo "ERROR: PR creation failed"; cat /tmp/pr.err
-                  fi
-                fi
-              else
-                echo "ERROR: Push failed"; cat /tmp/push.err
+              if ! gh pr view "$branch" >/dev/null 2>&1; then
+                gh pr create --title "Claude Fix [${type}]: $summary" \
+                             --body "Automated fix generated by Claude for ${type} alert #${alert_num} ($package_name). $ghsa_id" \
+                             --base main --head "$branch" || true
               fi
             else
-              echo "ERROR: Patch apply failed"; cat /tmp/apply.err
+              echo "Patch apply failed for alert #${alert_num}"
+              git apply --check /tmp/patch.diff || true
             fi
-            
-            git checkout main || true
+            git checkout main
           done
+
+      - name: Done
+        run: echo "Workflow completed."
