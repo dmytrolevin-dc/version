@@ -208,6 +208,7 @@ jobs:
           git config user.email "claude-bot@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
           echo "Token type: $(echo "$GH_TOKEN" | cut -c1-10)..."
+          echo "Token scopes: $(curl -sI -H "Authorization: token $GH_TOKEN" https://api.github.com/user | grep -i x-oauth-scopes)"
 
           strip_markdown() {
             echo "$1" | sed '/^```/d'
