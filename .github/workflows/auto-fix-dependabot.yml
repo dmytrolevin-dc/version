@@ -33,6 +33,15 @@ jobs:
       - name: Install dependencies
         run: curl --version >/dev/null 2>&1 && echo "curl is available"
 
+      - name: Debug secrets
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "ERROR: ANTHROPIC_API_KEY is empty!"
+            echo "Trying to use CLAUDE_API_KEY secret instead..."
+            export ANTHROPIC_API_KEY="${{ secrets.CLAUDE_API_KEY }}"
+          fi
+          echo "API Key status: $([ -n "$ANTHROPIC_API_KEY" ] && echo 'SET' || echo 'EMPTY')"
+
       - name: Fetch alerts
         id: fetch_alerts
         env:
@@ -86,9 +95,17 @@ jobs:
       - name: Process alerts and ask Claude for fixes
         if: steps.fetch_alerts.outputs.alerts_count != '0'
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || secrets.CLAUDE_API_KEY }}
         run: |
           set -e
+          
+          # Verify we have API key
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "ERROR: No API key available"
+            exit 1
+          fi
+          echo "✓ API Key available"
+          
           mkdir -p claude_requests
           
           extract_json() {
@@ -140,8 +157,8 @@ jobs:
                   }]
                 }')
               
-              curl -X POST "https://api.anthropic.com/v1/messages" \
-                -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+              curl -s -X POST "https://api.anthropic.com/v1/messages" \
+                -H "x-api-key: $ANTHROPIC_API_KEY" \
                 -H "anthropic-version: 2023-06-01" \
                 -H "content-type: application/json" \
                 -d "$json_payload" \
