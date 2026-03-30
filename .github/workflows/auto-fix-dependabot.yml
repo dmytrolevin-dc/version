@@ -168,7 +168,7 @@ jobs:
               continue
             fi
 
-            git add -A
+            git add "$manifest"
             git commit -m "chore: claude fix [dependabot #${alert_num}]: $summary"
             echo "✓ Committed"
 
