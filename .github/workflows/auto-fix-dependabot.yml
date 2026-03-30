@@ -121,26 +121,24 @@ jobs:
               [ "$type" = "dependabot" ] && msg="Update dependencies safely. $msg"
               
               alert_escaped=$(echo "$alert" | jq -Rs .)
+              msg_escaped=$(echo "$msg" | jq -Rs .)
               
               echo "[$idx/$num_alerts] $type alert..."
               
-              # Build JSON payload
-              json_payload=$(cat <<'JSONEOF'
-{
-  "model": "claude-3-5-sonnet-20241022",
-  "max_tokens": 4096,
-  "system": "SYSTEM_MSG",
-  "messages": [
-    {
-      "role": "user",
-      "content": "Alert metadata:\n\nALERT_DATA"
-    }
-  ]
-}
-JSONEOF
-)
-              json_payload="${json_payload//SYSTEM_MSG/$msg}"
-              json_payload="${json_payload//ALERT_DATA/$alert_escaped}"
+              # Build JSON payload using jq
+              json_payload=$(jq -n \
+                --arg model "claude-3-5-sonnet-20241022" \
+                --arg system "$msg" \
+                --arg alert_data "$alert" \
+                '{
+                  model: $model,
+                  max_tokens: 4096,
+                  system: $system,
+                  messages: [{
+                    role: "user",
+                    content: ("Alert metadata:\n\n" + $alert_data)
+                  }]
+                }')
               
               curl -X POST "https://api.anthropic.com/v1/messages" \
                 -H "x-api-key: ${ANTHROPIC_API_KEY}" \
