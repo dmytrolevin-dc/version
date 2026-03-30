@@ -116,18 +116,28 @@ jobs:
               fname="claude_requests/${type}_${idx}"
               echo "$alert" > "${fname}.json"
               
-              msg="Produce a valid JSON with fields: path, patch, summary. path=file to fix, patch=unified diff, summary=description."
-              [ "$type" = "code-scanning" ] && msg="Fix code vulnerabilities. $msg"
-              [ "$type" = "dependabot" ] && msg="Update dependencies safely. $msg"
-              
-              alert_escaped=$(echo "$alert" | jq -Rs .)
+              if [ "$type" = "code-scanning" ]; then
+                msg='You are a security engineer. Given a GitHub Code Scanning alert, produce a JSON object with exactly these fields: "path" (string: relative file path to fix), "patch" (string: unified diff in git apply format with correct context lines), "summary" (string: one-line description of the fix). The patch must be a valid unified diff that can be applied with git apply. Return only the raw JSON object, no markdown, no explanation.'
+              else
+                msg='You are a security engineer. Given a GitHub Dependabot alert, produce a JSON object with exactly these fields: "path" (string: relative file path, e.g. package.json or go.mod), "patch" (string: unified diff in git apply format), "summary" (string: one-line description of the fix). Return only the raw JSON object, no markdown, no explanation.'
+              fi
               
               echo "[$idx/$num_alerts] $type alert..."
+              jq -n \
+                --arg system "$msg" \
+                --arg alert "$alert" \
+                '{
+                  model: "claude-3-5-sonnet-20241022",
+                  max_tokens: 4096,
+                  system: $system,
+                  messages: [{role: "user", content: ("Alert metadata:\n\n" + $alert)}]
+                }' > "${fname}.request.json"
+
               curl -s -X POST "https://api.anthropic.com/v1/messages" \
                 -H "x-api-key: $ANTHROPIC_API_KEY" \
                 -H "anthropic-version: 2023-06-01" \
                 -H "content-type: application/json" \
-                -d "{\"model\":\"claude-3-5-sonnet-20241022\",\"max_tokens\":4096,\"system\":\"$msg\",\"messages\":[{\"role\":\"user\",\"content\":\"Alert metadata:\\n\\n$alert_escaped\"}]}" \
+                -d @"${fname}.request.json" \
                 > "${fname}.response" 2>/tmp/claude.err || {
                 echo "ERROR: Claude API failed"; cat /tmp/claude.err; continue
               }
@@ -206,13 +216,21 @@ jobs:
               git add "$path"
               git commit -m "chore: claude fix [$type #${alert_num}]: $summary" || true
               
+              # Check there are actual commits to PR
+              new_commits=$(git log main.."$branch" --oneline 2>/dev/null | wc -l)
+              if [ "$new_commits" -eq 0 ]; then
+                echo "SKIP: No new commits on branch vs main"; git checkout main || true; continue
+              fi
+
               if git push --set-upstream origin "$branch" --force 2>/tmp/push.err; then
                 echo "✓ Branch pushed"
-                
+
+                default_branch=$(gh repo view --json defaultBranchRef -q '.defaultBranchRef.name' 2>/dev/null || echo "main")
                 if ! gh pr view "$branch" >/dev/null 2>&1; then
-                  if gh pr create --title "Claude Fix [${type}]: $summary" \
-                                 --body "Automated fix for alert #${alert_num}" \
-                                 --base main --head "$branch" 2>/tmp/pr.err; then
+                  pr_title="Claude Fix [${type} #${alert_num}]: ${summary:-fix security alert}"
+                  if gh pr create --title "$pr_title" \
+                                 --body "Automated fix for alert #${alert_num} (${package_name})" \
+                                 --base "$default_branch" --head "$branch" 2>/tmp/pr.err; then
                     echo "✓ PR created"
                   else
                     echo "ERROR: PR creation failed"; cat /tmp/pr.err
