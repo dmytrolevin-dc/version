@@ -106,14 +106,15 @@ jobs:
           fi
           echo "✓ API Key available (length: ${#ANTHROPIC_API_KEY})"
           
-          # Test API key with a simple request
+          # Test API key with a simple request using different endpoints
           echo "Testing API key..."
           test_response=$(curl -s -X POST "https://api.anthropic.com/v1/messages" \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-            -d '{"model":"claude-opus-4","max_tokens":100,"messages":[{"role":"user","content":"test"}]}' 2>&1 | head -c 200)
+            -d '{"model":"claude-opus-4-1","max_tokens":100,"messages":[{"role":"user","content":"test"}]}' 2>&1 | head -c 300)
           echo "Test response: $test_response"
+          echo "Check if x-api-key is empty: key_length=${#ANTHROPIC_API_KEY}"
           
           mkdir -p claude_requests
           
@@ -153,7 +154,7 @@ jobs:
               
               # Build JSON payload using jq
               json_payload=$(jq -n \
-                --arg model "claude-opus-4" \
+                --arg model "claude-opus-4-1" \
                 --arg system "$msg" \
                 --arg alert_data "$alert" \
                 '{
