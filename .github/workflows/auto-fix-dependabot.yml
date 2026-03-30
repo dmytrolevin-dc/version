@@ -85,6 +85,7 @@ jobs:
           set -e
           git config user.name "claude-bot"
           git config user.email "claude-bot@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
           mkdir -p dep_fixes
 
           default_branch=$(gh repo view --json defaultBranchRef -q '.defaultBranchRef.name' 2>/dev/null || echo "main")
@@ -205,6 +206,7 @@ jobs:
           set -e
           git config user.name "claude-bot"
           git config user.email "claude-bot@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
 
           strip_markdown() {
             echo "$1" | sed '/^```/d'
