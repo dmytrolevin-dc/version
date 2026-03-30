@@ -106,8 +106,8 @@ jobs:
             jq -n \
               --arg alert "$alert" \
               '{
-                model: "claude-sonnet-4-5",
-                max_tokens: 512,
+                model: "claude-3-5-sonnet-20241022",
+                max_tokens: 1024,
                 system: "You are a security engineer. Given a GitHub Dependabot alert, return ONLY a raw JSON object (no markdown) with fields: \"command\" (shell command to update the dependency, e.g. \"npm install lodash@4.17.21\" or \"go get golang.org/x/net@v0.17.0\"), \"path\" (the manifest file that will change, e.g. \"package.json\"), \"summary\" (one-line description).",
                 messages: [{role: "user", content: ("Dependabot alert:\n\n" + $alert)}]
               }' | \
@@ -170,7 +170,7 @@ jobs:
               continue
             fi
 
-            git add "$manifest"
+            git add .
             git commit -m "chore: claude fix [dependabot #${alert_num}]: $summary"
             echo "✓ Committed"
 
@@ -257,12 +257,12 @@ jobs:
               --arg start_line "$start_line" \
               --arg message "$message" \
               '{
-                model: "claude-sonnet-4-5",
-                max_tokens: 4096,
-                system: "You are a security engineer fixing code vulnerabilities. You will receive a CodeQL alert and the FULL content of the affected file. Return ONLY a raw JSON object (no markdown) with fields: \"patch\" (a valid unified diff that can be applied with `git apply`, using correct line numbers from the provided file), \"summary\" (one-line description of the fix). The diff must exactly match the file content provided.",
+                model: "claude-3-5-sonnet-20241022",
+                max_tokens: 8192,
+                system: "You are a security engineer fixing code vulnerabilities. You will receive a CodeQL alert and the FULL content of the affected file. Return ONLY a raw JSON object (no markdown) with fields: \"fixed_content\" (the COMPLETE, updated file content with the vulnerability fixed), \"summary\" (one-line description of the fix). You MUST return the entire file content natively formatted. NEVER use placeholders like `// ... rest of code`. Output the FULL file content.",
                 messages: [{
                   role: "user",
-                  content: ("CodeQL alert:\n" + $alert + "\n\nVulnerability at line " + $start_line + ": " + $message + "\n\nFull content of " + $file_path + ":\n```\n" + $file_content + "\n```\n\nProvide a patch for this exact file content.")
+                  content: ("CodeQL alert:\n" + $alert + "\n\nVulnerability at line " + $start_line + ": " + $message + "\n\nFull content of " + $file_path + ":\n```\n" + $file_content + "\n```\n\nProvide the complete fixed file content.")
                 }]
               }' | \
               curl -s -X POST "https://api.anthropic.com/v1/messages" \
@@ -282,25 +282,19 @@ jobs:
               continue
             fi
 
-            patch=$(echo "$raw" | jq -r '.patch // empty')
+            fixed_content=$(echo "$raw" | jq -r '.fixed_content // empty')
             summary=$(echo "$raw" | jq -r '.summary // "fix code vulnerability"')
 
-            if [ -z "$patch" ]; then
-              echo "SKIP: Claude did not return a patch"
+            if [ -z "$fixed_content" ]; then
+              echo "SKIP: Claude did not return fixed content"
               continue
             fi
 
             git checkout "$default_branch" 2>/dev/null || git checkout -b "$default_branch"
             git checkout -B "$branch"
 
-            echo "$patch" > /tmp/codeql.patch
-            if git apply --whitespace=fix /tmp/codeql.patch 2>/tmp/apply.err; then
-              echo "✓ Patch applied"
-            else
-              echo "ERROR: Patch apply failed:"; cat /tmp/apply.err
-              git checkout "$default_branch" || true
-              continue
-            fi
+            printf "%s\n" "$fixed_content" > "$file_path"
+            echo "✓ File updated"
 
             if git diff --quiet HEAD; then
               echo "SKIP: No changes after patch"
