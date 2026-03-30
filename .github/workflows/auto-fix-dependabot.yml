@@ -95,6 +95,10 @@ jobs:
             exit 0
           fi
 
+          strip_markdown() {
+            echo "$1" | sed '/^```/d'
+          }
+
           claude_fix() {
             local alert="$1"
             jq -n \
@@ -129,7 +133,7 @@ jobs:
               continue
             fi
 
-            raw=$(echo "$response" | jq -r '.content[0].text')
+            raw=$(strip_markdown "$(echo "$response" | jq -r '.content[0].text')")
             if ! echo "$raw" | jq . >/dev/null 2>&1; then
               echo "ERROR: Claude returned invalid JSON: $raw"
               continue
@@ -202,6 +206,10 @@ jobs:
           git config user.name "claude-bot"
           git config user.email "claude-bot@users.noreply.github.com"
 
+          strip_markdown() {
+            echo "$1" | sed '/^```/d'
+          }
+
           default_branch=$(gh repo view --json defaultBranchRef -q '.defaultBranchRef.name' 2>/dev/null || echo "main")
           num_alerts=$(jq '. | length' code_scanning_alerts.json)
 
@@ -264,7 +272,7 @@ jobs:
               continue
             fi
 
-            raw=$(echo "$response" | jq -r '.content[0].text')
+            raw=$(strip_markdown "$(echo "$response" | jq -r '.content[0].text')")
             if ! echo "$raw" | jq . >/dev/null 2>&1; then
               echo "ERROR: Claude returned invalid JSON"
               continue
