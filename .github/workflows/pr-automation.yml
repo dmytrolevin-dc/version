@@ -27,7 +27,7 @@ jobs:
         run: |
           # Get the list of commits between the base branch and the PR branch
           # Using git log to get subjects and bodies of commits not in base
-          COMMITS=$(git log origin/${{ github.base_ref }}..origin/${{ github.head_ref }} --pretty=format:"* %s (%h)")
+          COMMITS=$(git log origin/${{ github.base_ref }}..origin/${{ github.head_ref }} --pretty=format:"* %s (%h)" | sed -E 's|(VER-[0-9]+)|[\1](https://districtcyber.atlassian.net/browse/\1)|g')
           
           if [ -z "$COMMITS" ]; then
             COMMITS="No new commits found."
@@ -70,6 +70,12 @@ jobs:
               newBody = currentBody ? `${currentBody}\n\n${newContent}` : newContent;
             }
             
+            
+            // Linkify Jira tickets (VER-XXX) in the entire body
+            // This handles tickets that might have been manually added to the description
+            const jiraRegex = /(?<!\[)(VER-[0-9]+)(?!\]\(https:\/\/districtcyber\.atlassian\.net\/browse\/)/g;
+            newBody = newBody.replace(jiraRegex, "[$1](https://districtcyber.atlassian.net/browse/$1)");
+
             await github.rest.pulls.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -94,10 +100,10 @@ jobs:
           
           if [ -z "$PREVIOUS_TAG" ]; then
             # If no previous tag, get all commits until now
-            COMMITS=$(git log --pretty=format:"* %s (%h)")
+            COMMITS=$(git log --pretty=format:"* %s (%h)" | sed -E 's|(VER-[0-9]+)|[\1](https://districtcyber.atlassian.net/browse/\1)|g')
           else
             # Get commits between previous tag and current tag
-            COMMITS=$(git log ${PREVIOUS_TAG}..${{ github.ref }} --pretty=format:"* %s (%h)")
+            COMMITS=$(git log ${PREVIOUS_TAG}..${{ github.ref }} --pretty=format:"* %s (%h)" | sed -E 's|(VER-[0-9]+)|[\1](https://districtcyber.atlassian.net/browse/\1)|g')
           fi
           
           {
