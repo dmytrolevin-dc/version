@@ -1,90 +1,14 @@
-name: PR Automation & Release
+name: Release Automation
 
 on:
-  pull_request:
-    branches: [ "main" ]
-    types: [opened, synchronize, reopened]
   push:
-    tags:
-      - 'v*'
+    branches: [ "main" ]
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
-  pr-changelog:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Generate Changelog for PR
-        id: changelog
-        run: |
-          # Get the list of commits between the base branch and the PR branch
-          # Using git log to get subjects and bodies of commits not in base
-          COMMITS=$(git log origin/${{ github.base_ref }}..origin/${{ github.head_ref }} --pretty=format:"* %s (%h)" | sed -E 's|(VER-[0-9]+)|[\1](https://districtcyber.atlassian.net/browse/\1)|g')
-          
-          if [ -z "$COMMITS" ]; then
-            COMMITS="No new commits found."
-          fi
-          
-          # Prepare the body
-          BODY_HEADER="## 📝 Changes in this PR"
-          BODY_FOOTER="\n\n---\n*Generated automatically by GitHub Actions*"
-          
-          # We need to handle multi-line strings for GITHUB_OUTPUT
-          {
-            echo "changelog<<EOF"
-            echo "$BODY_HEADER"
-            echo ""
-            echo "$COMMITS"
-            echo "$BODY_FOOTER"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Update PR Description
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const changelog = `${{ steps.changelog.outputs.changelog }}`;
-            const prNumber = context.payload.pull_request.number;
-            const currentBody = context.payload.pull_request.body || "";
-            
-            // Marker to identify our automated section
-            const markerStart = "<!-- CHANGELOG_START -->";
-            const markerEnd = "<!-- CHANGELOG_END -->";
-            const newContent = `${markerStart}\n${changelog}\n${markerEnd}`;
-            
-            let newBody;
-            if (currentBody.includes(markerStart) && currentBody.includes(markerEnd)) {
-              // Replace existing changelog section
-              const regex = new RegExp(`${markerStart}[\\s\\S]*${markerEnd}`);
-              newBody = currentBody.replace(regex, newContent);
-            } else {
-              // Append to the end or start
-              newBody = currentBody ? `${currentBody}\n\n${newContent}` : newContent;
-            }
-            
-            
-            // Linkify Jira tickets (VER-XXX) in the entire body
-            // This handles tickets that might have been manually added to the description
-            const jiraRegex = /(?<!\[)(VER-[0-9]+)(?!\]\(https:\/\/districtcyber\.atlassian\.net\/browse\/)/g;
-            newBody = newBody.replace(jiraRegex, "[$1](https://districtcyber.atlassian.net/browse/$1)");
-
-            await github.rest.pulls.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              body: newBody
-            });
-
   create-release:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -92,32 +16,48 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 1. Считаем версию через GitVersion
+      - name: Install GitVersion
+        uses: gittools/actions/gitversion/setup@v1.1.1
+        with:
+          versionSpec: '5.x'
+
+      - name: Determine Version
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v1.1.1
+
+      # 2. Генерируем сгруппированные заметки релиза
       - name: Generate Release Notes
         id: release_notes
         run: |
-          # Get the previous tag
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ github.ref }}^ 2>/dev/null || echo "")
+          VERSION="v${{ steps.gitversion.outputs.semVer }}"
           
-          if [ -z "$PREVIOUS_TAG" ]; then
-            # If no previous tag, get all commits until now
-            COMMITS=$(git log --pretty=format:"* %s (%h)" | sed -E 's|(VER-[0-9]+)|[\1](https://districtcyber.atlassian.net/browse/\1)|g')
-          else
-            # Get commits between previous tag and current tag
-            COMMITS=$(git log ${PREVIOUS_TAG}..${{ github.ref }} --pretty=format:"* %s (%h)" | sed -E 's|(VER-[0-9]+)|[\1](https://districtcyber.atlassian.net/browse/\1)|g')
+          # Проверяем, не существует ли уже такой тег
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists. Skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          
+          # Создаем локальный тег для conventional-changelog
+          git tag "$VERSION"
+          
+          # Группируем коммиты (Angular) + линкуем Jira
+          npx -y conventional-changelog-cli -p angular -r 1 | sed -E 's|(VER-[0-9]+)|[\1](https://districtcyber.atlassian.net/browse/\1)|g' > notes.md
           
           {
             echo "notes<<EOF"
-            echo "## What's Changed"
-            echo ""
-            echo "$COMMITS"
+            cat notes.md
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      # 3. Публикация релиза
       - name: Create GitHub Release
+        if: steps.release_notes.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.gitversion.outputs.semVer }}
           body: ${{ steps.release_notes.outputs.notes }}
           draft: false
           prerelease: false
-          generate_release_notes: false # We use our own generated notes
+          generate_release_notes: false
