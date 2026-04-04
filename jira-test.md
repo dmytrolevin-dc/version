@@ -7,3 +7,4 @@ test content 5
 test content 6
 test feat 1
 test fix 1
+test docs 1
