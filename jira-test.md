@@ -8,3 +8,4 @@ test content 6
 test feat 1
 test fix 1
 test docs 1
+test feat 2
