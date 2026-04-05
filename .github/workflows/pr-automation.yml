@@ -30,7 +30,7 @@ jobs:
         run: |
           VERSION="${{ steps.gitversion.outputs.semVer }}"
           echo "{\"name\": \"${{ github.event.repository.name }}\", \"version\": \"$VERSION\"}" > package.json
-          npx -y conventional-changelog-cli -p angular -r 1 | sed -E 's|(VER-[0-9]+)|[\1](https://districtcyber.atlassian.net/browse/\1)|g' > notes.md
+          npx -y conventional-changelog-cli -p angular -r 1 | sed -E 's|(VER-[0-9]+)|[\1](https://districtcyber.atlassian.net/browse/\1)|g' | tail -n +3 > notes.md
           {
             echo "notes<<EOF"
             cat notes.md
