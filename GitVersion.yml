@@ -1,18 +1,23 @@
+assembly-versioning-scheme: MajorMinorPatch
 mode: ContinuousDelivery
+major-version-bump-message: "^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\\((.*)\\))?!:.*|BREAKING CHANGE:.*"
+minor-version-bump-message: "^feat(\\((.*)\\))?:.*"
+patch-version-bump-message: "^(build|chore|ci|docs|fix|perf|refactor|revert|style|test)(\\((.*)\\))?:.*"
 branches:
   main:
     regex: ^master$|^main$
     mode: ContinuousDelivery
     tag: ''
     increment: Inherit
-    prevent-increment-of-merged-branch-version: false
+    prevent-increment-of-merged-branch-version: true
     track-merge-target: false
-    source-branches: [ 'develop', 'release' ]
-  develop:
+    is-release-branch: true
+    source-branches: [ 'dev', 'develop', 'release' ]
+  dev:
     regex: ^dev(elop)?(ment)?$
     mode: ContinuousDeployment
     tag: beta
-    increment: Inherit
+    increment: Minor
     prevent-increment-of-merged-branch-version: false
     track-merge-target: true
     source-branches: []
