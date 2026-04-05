@@ -30,20 +30,25 @@ jobs:
       - name: Generate Release Notes
         id: release_notes
         run: |
-          VERSION="v${{ steps.gitversion.outputs.semVer }}"
+          VERSION="${{ steps.gitversion.outputs.semVer }}"
+          V_VERSION="v$VERSION"
           
           # Проверяем, не существует ли уже такой тег
-          if git rev-parse "$VERSION" >/dev/null 2>&1; then
-            echo "Tag $VERSION already exists. Skipping."
+          if git rev-parse "$V_VERSION" >/dev/null 2>&1; then
+            echo "Tag $V_VERSION already exists. Skipping."
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           
-          # Создаем локальный тег для conventional-changelog
-          git tag "$VERSION"
+          # 1. Update package.json version locally so conventional-changelog uses it
+          npm version $VERSION --no-git-tag-version --allow-same-version
           
-          # Группируем коммиты (Angular) + линкуем Jira
+          # 2. Generate notes BEFORE creating the local tag
+          # This compares the last tag to the current state
           npx -y conventional-changelog-cli -p angular -r 1 | sed -E 's|(VER-[0-9]+)|[\1](https://districtcyber.atlassian.net/browse/\1)|g' > notes.md
+          
+          # 3. Create local tag for the release action (it will push it)
+          git tag "$V_VERSION"
           
           {
             echo "notes<<EOF"
