@@ -29,12 +29,21 @@ jobs:
         id: release_notes
         run: |
           VERSION="${{ steps.gitversion.outputs.semVer }}"
-          npx -y conventional-changelog-cli -p angular -r 1 -c <(echo "{\"version\": \"$VERSION\"}") | sed -E 's|(VER-[0-9]+)|[\1](https://districtcyber.atlassian.net/browse/\1)|g' | tail -n +3 > notes.md
+          
+          # 1. Создаем временный package.json для передачи версии (надежный способ)
+          echo "{\"name\": \"${{ github.event.repository.name }}\", \"version\": \"$VERSION\"}" > package.json
+          
+          # 2. Генерируем заметки и отсекаем только заголовок (первые 2 строки)
+          npx -y conventional-changelog-cli -p angular -r 1 | sed -E 's|(VER-[0-9]+)|[\1](https://districtcyber.atlassian.net/browse/\1)|g' | sed '1,2d' > notes.md
+          
           {
             echo "notes<<EOF"
             cat notes.md
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
+          
+          # 3. Чистим временный файл
+          rm package.json
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
