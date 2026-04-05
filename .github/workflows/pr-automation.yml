@@ -36,7 +36,6 @@ jobs:
             cat notes.md
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
-          rm package.json
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
